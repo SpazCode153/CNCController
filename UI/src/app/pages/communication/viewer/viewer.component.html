@@ -1,0 +1,84 @@
+<ul ngbNav #nav="ngbNav" [(activeId)]="active" class="nav-tabs">
+    <li [ngbNavItem]="1">
+      <a ngbNavLink>Settings</a>
+      <ng-template ngbNavContent>
+        <div class="container">
+            <div class="row justify-content-center">
+                <div class="col-4">
+                    <form>
+                        <div class="input-group mb-3">
+                            <label for="inputComPort" class="label col-sm-3 col-form-label">COM Port</label>
+                            <div class="col-sm-9">
+                                <input type="text" id="inputComPort" class="form-control" [value]="comPort" (change)="setComPort($event)">
+                            </div>
+                        </div>
+                        <div class="input-group mb-3">
+                            <label for="inputBaudRate" class="label col-sm-3 col-form-label">Baud Rate</label>
+                            <div class="col-sm-9">
+                                <input type="number" id="inputBaudRate" class="form-control" [value]="baudRate" (change)="setBaudRate($event)">
+                            </div>
+                        </div>
+                        <div class="input-group mb-3">
+                            <label for="inputDatabits" class="label col-sm-3 col-form-label">Databits</label>
+                            <div class="col-sm-9">
+                                <select class="form-select" aria-label="Select Databits" (change)="setDatabits($event)">
+                                    <option [value]="7">7</option>
+                                    <option [value]="8">8</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="input-group mb-3">
+                            <label for="inputStopbits" class="label col-sm-3 col-form-label">Stopbits</label>
+                            <div class="col-sm-9">
+                                <select class="form-select" aria-label="Select Stopbits">
+                                    <option [value]="0">None</option>
+                                    <option [value]="1">1</option>
+                                    <option [value]="2">2</option>
+                                    <option [value]="3">1.5</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="input-group mb-3">
+                            <label for="inputParity" class="label col-sm-3 col-form-label">Parity</label>
+                            <div class="col-sm-9">
+                                <select class="form-select" aria-label="Select Parity">
+                                    <option value="0">None</option>
+                                    <option value="1">Odd</option>
+                                    <option value="2">Even</option>
+                                    <option value="3">Mark</option>
+                                    <option value="4">Space</option>
+                                </select>
+                            </div>
+                        </div>
+                    </form>
+                    <button type="button" class="btn btn-primary w-100" (click)="setCommunicationSettings()">Set</button>
+                </div>
+            </div>
+        </div>
+      </ng-template>
+    </li>
+    <li [ngbNavItem]="2">
+      <a ngbNavLink>Viewer</a>
+      <ng-template ngbNavContent>
+        <div style="height: 65vh; 
+            border-radius: 5px; 
+            border-color: black; 
+            border-width: 2px;
+            border-style: solid;">
+            <textarea #commData style="white-space: pre-line; 
+                height: 100%; 
+                width: 100%; 
+                resize: none;">{{ data }}</textarea>
+        </div>
+        <br>
+        <input type="text" id="inputSend" class="form-control" (change)="setInput($event)" [value]="input">
+        <button type="button" class="btn btn-primary w-100" (click)="sendMessage()">Send</button>
+        <button type="button" class="btn btn-primary w-100" (click)="connect()">Connect</button>
+        <button type="button" class="btn btn-primary w-100" (click)="disconnect()">Disconnect</button>
+      </ng-template>
+    </li>
+  </ul>
+
+  <div [ngbNavOutlet]="nav" class="mt-2">
+
+  </div>
