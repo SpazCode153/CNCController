@@ -115,22 +115,83 @@ namespace API.Machines
 
             using (stream.Connect())
             {
-                communciationHandler.SendMessage(new SerialMessage(command.Command));
+                communciationHandler.SendMessage(new SerialMessage(command.Command + "\n"));
 
                 try
                 {
-                    await stream.ForEachAsync(result =>
-                    {
-                        if(result.Error)
-                        {
-                            throw new Exception("Machine failed to perform Home command G28");
-                        }
+                    G28CommandResult result = await stream.LastOrDefaultAsync();
 
-                        if(result.Success)
+                    if (result.Success)
+                    {
+                        return;
+                    }
+
+                    throw new Exception("Machine failed to perform G28 command");
+                }
+                catch (Exception ex)
+                {
+                    throw ex;
+                }
+            }
+        }
+
+        public async Task Move(double? x, double? y, double? z)
+        {
+            await Task.Delay(500);
+
+            G0Command command = new G0Command(x, y, z);
+
+            IConnectableObservable<G0CommandResult> stream = singleResponseStream(command);
+
+            using (stream.Connect())
+            {
+                communciationHandler.SendMessage(new SerialMessage(command.Command + "\n"));
+
+                try
+                {
+                    G0CommandResult result = await stream.LastOrDefaultAsync();
+
+                    if(result.Success)
+                    {
+                        return;
+                    }
+
+                    throw new Exception("Machine failed to perform G0 command");
+                }
+                catch (Exception ex)
+                {
+                    throw ex;
+                }
+            }
+        }
+
+        public async Task<Position> Probe(double? x, double? y)
+        {
+            await Task.Delay(500);
+
+            G30Command command = new G30Command(x, y);
+
+            IConnectableObservable<G30CommandResult> stream = singleResponseStream(command);
+
+            using (stream.Connect())
+            {
+                communciationHandler.SendMessage(new SerialMessage(command.Command + "\n"));
+
+                try
+                {
+                    G30CommandResult result = await stream.LastOrDefaultAsync();
+
+                    if(result.Success)
+                    {
+                        return new Position()
                         {
-                            return;
-                        }
-                    });
+                            X = result.Position[0],
+                            Y = result.Position[1],
+                            Z = result.Position[2]
+                        };
+                    }
+
+                    throw new Exception("Machine failed to perform G30 command");
                 }
                 catch (Exception ex)
                 {
@@ -150,5 +211,14 @@ namespace API.Machines
         {
             communciationHandler.Disconnect();
         }
+    }
+
+    public class Position
+    {
+        public double X { get; set; }
+
+        public double Y { get; set; }
+
+        public double Z { get; set; }
     }
 }

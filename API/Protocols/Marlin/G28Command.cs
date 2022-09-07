@@ -28,7 +28,7 @@
 
         public override G28CommandResult ValidateResponse(string response)
         {
-            if(response.Contains("echo:busy: processing"))
+            if(response == "echo:busy: processing\n")
             {
                 return new G28CommandResult(false, true, false, new double[] { 0, 0, 0 });
             }
@@ -38,11 +38,11 @@
                 string line = response.Substring(2, (response.Length - 2));
                 string xStr = line.Substring(0, line.IndexOf(" "));
 
-                line = response.Substring(line.IndexOf(" ") + 3, (response.Length - 3));
+                line = line.Substring(line.IndexOf(" ") + 3, (line.Length - (line.IndexOf(" ") + 4)));
                 string yStr = line.Substring(0, line.IndexOf(" "));
 
-                line = response.Substring(line.IndexOf(" ") + 3, (response.Length - 3));
-                string zStr = line.Substring(0, line.Length);
+                line = line.Substring(line.IndexOf(" ") + 3, (line.Length - (line.IndexOf(" ") + 4)));
+                string zStr = line.Substring(0, line.IndexOf(" "));
 
                 double x = 0;
                 double y = 0;
