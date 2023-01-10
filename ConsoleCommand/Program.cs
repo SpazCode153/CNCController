@@ -1,7 +1,11 @@
 ﻿using API.Machines;
+using API.Protocols.Marlin;
+using GCodeParser;
+using GCodeParser.Commands;
 using System.Diagnostics;
 using System.IO.Ports;
 using System.Reflection;
+using G0Command = GCodeParser.Commands.G0Command;
 
 namespace ConsoleCommand
 {
@@ -70,6 +74,12 @@ namespace ConsoleCommand
     public class Commands
     {
         private MarlinMachineHandler machineHandler = new MarlinMachineHandler();
+
+        Dictionary<uint, BaseCommand> gcodeFileCommands;
+
+        IEnumerable<Position> heightPositions;
+
+        List<PositionSquare> squares;
 
         public void Help()
         {
@@ -255,43 +265,42 @@ namespace ConsoleCommand
             double endY = double.Parse(endYPos);
             double gapSize = double.Parse(gap);
 
-            machineHandler.Move(startX, startY, 4.0).Wait();
-            int counter = 1;
-
-            Console.WriteLine("Probing...");
             try
             {
-                List<Position> positions = new List<Position>();
-                double totalProbePoints = ((endX - startX) / gapSize) * ((endY - startY) / gapSize);
-                int pointsComplete = 0;
-                int perPos = Console.CursorLeft;
-                Console.Write($"Points: 0/{totalProbePoints}    0% Complete...");
+                heightPositions = probeGrid(startX, endX, startY, endY, gapSize);
 
-                Stopwatch stopwatch = new Stopwatch();
+                squares = new List<PositionSquare>();
 
-                stopwatch.Start();
-                for (double y = startY; y < endY; y = y + gapSize)
+                foreach (Position position in heightPositions)
                 {
-                    for (double x = startX; x < endX; x = x + gapSize)
+                    Position bottomLeft = position;
+
+                    Position? bottomRight = heightPositions.SingleOrDefault(i => i.Y == position.Y && i.X == (position.X + gapSize));
+                    
+                    if(bottomRight == null)
                     {
-                        if(counter > 1)
-                        {
-                            machineHandler.Move(x, y, 4.0).Wait();
-                        }
-
-                        positions.Add(machineHandler.Probe(x, y).Result);
-                        machineHandler.Move(x, y, 4.0).Wait();
-                        pointsComplete++;
-                        Console.CursorLeft = perPos;
-                        Console.Write("                                                                                                                       ");
-                        Console.CursorLeft = perPos;
-                        Console.Write($"{ stopwatch.Elapsed }  Points: {pointsComplete}/{totalProbePoints}    { ((pointsComplete/totalProbePoints) * 100) }% Complete...");
-                        counter++;
+                        continue;
                     }
-                }
-                stopwatch.Stop();
+                    
+                    Position? topLeft = heightPositions.SingleOrDefault(i => i.X == position.X && i.Y == (position.Y + gapSize));
 
-                foreach (Position position in positions)
+                    if (topLeft == null)
+                    {
+                        continue;
+                    }
+
+                    Position? topRight = heightPositions.SingleOrDefault(i => i.X == (position.X + gapSize) && i.Y == (position.Y + gapSize));
+
+                    if (topRight == null)
+                    {
+                        continue;
+                    }
+
+                    squares.Add(new PositionSquare(topLeft, bottomLeft, topRight, bottomRight, 0.01));
+                }
+
+
+                foreach (Position position in heightPositions)
                 {
                     Console.WriteLine($"Position: X{position.X} Y{position.Y}   Z Height:{position.Z}");
                 }
@@ -302,12 +311,403 @@ namespace ConsoleCommand
             }
         }
 
+        private IEnumerable<Position> probeGrid(double startX, double endX, double startY, double endY, double gapSize)
+        {
+            machineHandler.Move(startX, startY, 4.0).Wait();
+            int counter = 1;
+
+            Console.WriteLine("Probing...");
+
+            List<Position> positions = new List<Position>();
+            double totalProbePoints = (((endX + gapSize) - startX) / gapSize) * (((endY + gapSize) - startY) / gapSize);
+            int pointsComplete = 0;
+            int perPos = Console.CursorLeft;
+            Console.Write($"Points: 0/{totalProbePoints}    0% Complete...");
+
+            TimeSpan totalEstimatedTime = TimeSpan.Zero;
+            TimeSpan lastPointTimeElapsed = TimeSpan.Zero;
+
+            Stopwatch stopwatch = new Stopwatch();
+
+            stopwatch.Start();
+            for (double y = startY; y < endY + gapSize; y += gapSize)
+            {
+                for (double x = startX; x < endX + gapSize; x += gapSize)
+                {
+                    if (counter > 1)
+                    {
+                        machineHandler.Move(x, y, 4.0).Wait();
+                    }
+                    if(counter == 2)
+                    {
+                        totalEstimatedTime = TimeSpan.FromTicks((long)(lastPointTimeElapsed.Ticks * totalProbePoints));
+                    }
+
+                    positions.Add(machineHandler.Probe(x, y).Result);
+                    machineHandler.Move(x, y, 4.0).Wait();
+                    pointsComplete++;
+                    Console.CursorLeft = perPos;
+                    Console.Write("                                                                                                                       ");
+                    Console.CursorLeft = perPos;
+                    lastPointTimeElapsed = stopwatch.Elapsed;
+                    Console.Write($"{lastPointTimeElapsed}/{totalEstimatedTime}  Points: {pointsComplete}/{totalProbePoints}    {((pointsComplete / totalProbePoints) * 100)}% Complete...");
+                    counter++;
+                }
+            }
+            stopwatch.Stop();
+
+            return positions;
+        }
+
         public void LoadFile()
         {
             Console.Write("What is the file directory?: ");
             string fileDirectory = Console.ReadLine();
 
-            
+            if(File.Exists(fileDirectory))
+            {
+                gcodeFileCommands = Parser.ReadFile(fileDirectory);
+            }
+            else
+            {
+                Console.WriteLine("File does not exist!");
+            }
+        }
+
+        public void ApplyHeightMap()
+        {
+            double? currentX = null;
+            double? currentY = null;
+            double? currentZ = null;
+
+            for(uint i = 1; i < gcodeFileCommands.Count + 1; i++)
+            {
+                switch(gcodeFileCommands[i].CommandType)
+                {
+                    case GCodeCommand.G0:
+                        {
+                            G0Command g0Command = (G0Command)gcodeFileCommands[i];
+
+                            if (g0Command.XPosition != null)
+                            {
+                                currentX = g0Command.XPosition;
+                            }
+                            if (g0Command.YPosition != null)
+                            {
+                                currentY = g0Command.YPosition;
+                            }
+                            if (g0Command.ZPosition != null)
+                            {
+                                currentZ = g0Command.ZPosition;
+
+                                if(currentX != null && currentY != null)
+                                {
+                                    PositionSquare? positionSquare = squares.SingleOrDefault(x => x.IsPositionInSquare((double)currentX, (double)currentY));
+
+                                    if(positionSquare != null)
+                                    {
+                                        positionSquare.ApplyZHeight(new Position()
+                                        {
+                                            X = (double)currentX,
+                                            Y = (double)currentY,
+                                            Z = (double)currentZ
+                                        });
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("Failed to apply height map, position is not in grid.");
+                                        return;
+                                    }
+                                }
+                            }
+
+                            break;
+                        }
+                    case GCodeCommand.G1:
+                        {
+                            G1Command g1Command = (G1Command)gcodeFileCommands[i];
+
+                            if (g1Command.XPosition != null)
+                            {
+                                currentX = g1Command.XPosition;
+                            }
+                            if (g1Command.YPosition != null)
+                            {
+                                currentY = g1Command.YPosition;
+                            }
+                            if (g1Command.ZPosition != null)
+                            {
+                                currentZ = g1Command.ZPosition;
+
+                                if (currentX != null && currentY != null)
+                                {
+                                    PositionSquare? positionSquare = squares.SingleOrDefault(x => x.IsPositionInSquare((double)currentX, (double)currentY));
+
+                                    if (positionSquare != null)
+                                    {
+                                        positionSquare.ApplyZHeight(new Position()
+                                        {
+                                            X = (double)currentX,
+                                            Y = (double)currentY,
+                                            Z = (double)currentZ
+                                        });
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("Failed to apply height map, position is not in grid.");
+                                        return;
+                                    }
+                                }
+                            }
+
+                            break;
+                        }
+                }
+            }
+        }
+
+        public void ProbeGcodeFileShape()
+        {
+            if (gcodeFileCommands != null)
+            {
+                double? minXPos = null;
+                double? minYPos = null;
+                double? maxXPos = null;
+                double? maxYPos = null;
+                double? currentZPos = 0;
+
+                for (uint i = 1; i < (gcodeFileCommands.Count + 1); i++)
+                {
+                    BaseCommand command = gcodeFileCommands[i];
+
+                    if (command.CommandType == GCodeCommand.G0)
+                    {
+                        G0Command g0Command = (G0Command)command;
+
+                        if (currentZPos < 0)
+                        {
+                            if (g0Command.XPosition != null)
+                            {
+                                if (minXPos != null)
+                                {
+                                    if (minXPos > g0Command.XPosition)
+                                    {
+                                        minXPos = g0Command.XPosition;
+                                    }
+                                }
+                                else
+                                {
+                                    minXPos = g0Command.XPosition;
+                                }
+
+                                if (maxXPos != null)
+                                {
+                                    if (maxXPos < g0Command.XPosition)
+                                    {
+                                        maxXPos = g0Command.XPosition;
+                                    }
+                                }
+                                else
+                                {
+                                    maxXPos = g0Command.XPosition;
+                                }
+                            }
+                            if (g0Command.YPosition != null)
+                            {
+                                if (minYPos != null)
+                                {
+                                    if (minYPos > g0Command.YPosition)
+                                    {
+                                        minYPos = g0Command.YPosition;
+                                    }
+                                }
+                                else
+                                {
+                                    minYPos = g0Command.YPosition;
+                                }
+
+                                if (maxYPos != null)
+                                {
+                                    if (maxYPos < g0Command.YPosition)
+                                    {
+                                        maxYPos = g0Command.YPosition;
+                                    }
+                                }
+                                else
+                                {
+                                    maxYPos = g0Command.YPosition;
+                                }
+                            }
+                        }
+                        if (g0Command.ZPosition != null)
+                        {
+                            currentZPos = g0Command.ZPosition;
+                        }
+                    }
+                    if (command.CommandType == GCodeCommand.G1)
+                    {
+                        G1Command g1Command = (G1Command)command;
+
+                        if (currentZPos < 0)
+                        {
+                            if (g1Command.XPosition != null)
+                            {
+                                if (minXPos != null)
+                                {
+                                    if (minXPos > g1Command.XPosition)
+                                    {
+                                        minXPos = g1Command.XPosition;
+                                    }
+                                }
+                                else
+                                {
+                                    minXPos = g1Command.XPosition;
+                                }
+
+                                if (maxXPos != null)
+                                {
+                                    if (maxXPos < g1Command.XPosition)
+                                    {
+                                        maxXPos = g1Command.XPosition;
+                                    }
+                                }
+                                else
+                                {
+                                    maxXPos = g1Command.XPosition;
+                                }
+                            }
+                            if (g1Command.YPosition != null)
+                            {
+                                if (minYPos != null)
+                                {
+                                    if (minYPos > g1Command.YPosition)
+                                    {
+                                        minYPos = g1Command.YPosition;
+                                    }
+                                }
+                                else
+                                {
+                                    minYPos = g1Command.YPosition;
+                                }
+
+                                if (maxYPos != null)
+                                {
+                                    if (maxYPos < g1Command.YPosition)
+                                    {
+                                        maxYPos = g1Command.YPosition;
+                                    }
+                                }
+                                else
+                                {
+                                    maxYPos = g1Command.YPosition;
+                                }
+                            }
+                        }
+                        if (g1Command.ZPosition != null)
+                        {
+                            currentZPos = g1Command.ZPosition;
+                        }
+                    }
+                }
+
+                Console.WriteLine($"Min X:{Math.Round((double)minXPos, MidpointRounding.ToNegativeInfinity)}");
+                Console.WriteLine($"Max X:{Math.Round((double)maxXPos, MidpointRounding.ToPositiveInfinity)}");
+                Console.WriteLine($"Min Y:{Math.Round((double)minYPos, MidpointRounding.ToNegativeInfinity)}");
+                Console.WriteLine($"Max Y:{Math.Round((double)maxYPos, MidpointRounding.ToPositiveInfinity)}");
+
+                if (minXPos != null && maxXPos != null && minYPos != null && maxYPos != null)
+                {
+                    heightPositions = probeGrid(Math.Round((double)minXPos,MidpointRounding.ToNegativeInfinity), 
+                        Math.Round((double)maxXPos, MidpointRounding.ToPositiveInfinity),
+                        Math.Round((double)minYPos, MidpointRounding.ToNegativeInfinity),
+                        Math.Round((double)maxYPos, MidpointRounding.ToPositiveInfinity), 
+                        1.0);
+
+                    squares = new List<PositionSquare>();
+
+                    foreach (Position position in heightPositions)
+                    {
+                        Position bottomLeft = position;
+
+                        Position? bottomRight = heightPositions.SingleOrDefault(i => i.Y == position.Y && i.X == (position.X + 1));
+
+                        if (bottomRight == null)
+                        {
+                            continue;
+                        }
+
+                        Position? topLeft = heightPositions.SingleOrDefault(i => i.X == position.X && i.Y == (position.Y + 1));
+
+                        if (topLeft == null)
+                        {
+                            continue;
+                        }
+
+                        Position? topRight = heightPositions.SingleOrDefault(i => i.X == (position.X + 1) && i.Y == (position.Y + 1));
+
+                        if (topRight == null)
+                        {
+                            continue;
+                        }
+
+                        squares.Add(new PositionSquare(topLeft, bottomLeft, topRight, bottomRight, 0.01));
+                    }
+                }
+                else
+                {
+                    Console.WriteLine("Cant probe area, coordinates are invalid!");
+                }
+            }
+            else
+            {
+                Console.WriteLine("Please load a GCode file");
+            }
+        }
+
+        public void SaveHeightMapToFile()
+        {
+            if(heightPositions != null)
+            {
+                Console.Write("What is the file name?: ");
+                string fileName = Console.ReadLine();
+
+                using (StreamWriter sw = new StreamWriter(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), fileName),false))
+                {
+                    foreach(Position pos in heightPositions)
+                    {
+                        sw.WriteLine($"{ pos.X },{ pos.Y },{ pos.Z }");
+                    }
+                }
+            }
+        }
+
+        public void LoadHeightMapFromFile()
+        {
+            Console.Write("What is the file name?: ");
+            string fileName = Console.ReadLine();
+
+            List<Position> hPositions = new List<Position>();
+
+            using (StreamReader sr = new StreamReader(Path.Combine(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location), fileName)))
+            {
+                string? line = sr.ReadLine();
+
+                while (line != null)
+                {
+                    string[] coordinates = line.Split(',');
+
+                    hPositions.Add(new Position()
+                    {
+                        X = double.Parse(coordinates[0]),
+                        Y = double.Parse(coordinates[1]),
+                        Z = double.Parse(coordinates[2])
+                    });
+
+                    line = sr.ReadLine();
+                }
+            }
+
+            heightPositions = hPositions.ToArray();
         }
 
         public void Exit()

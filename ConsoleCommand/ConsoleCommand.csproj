@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\API\API.csproj" />
+    <ProjectReference Include="..\GCodeParser\GCodeParser.csproj" />
   </ItemGroup>
 
 </Project>

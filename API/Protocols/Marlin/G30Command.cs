@@ -59,7 +59,7 @@
 
                 try
                 {
-                    y = double.Parse(xStr);
+                    y = double.Parse(yStr);
                 }
                 catch (Exception)
                 {

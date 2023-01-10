@@ -5,7 +5,9 @@ VisualStudioVersion = 17.2.32630.192
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "API", "API\API.csproj", "{213D35FC-7191-4919-8446-61A68F94EEDE}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ConsoleCommand", "ConsoleCommand\ConsoleCommand.csproj", "{D78EAB2E-5618-4F60-94E6-584E888F272B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "ConsoleCommand", "ConsoleCommand\ConsoleCommand.csproj", "{D78EAB2E-5618-4F60-94E6-584E888F272B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GCodeParser", "GCodeParser\GCodeParser.csproj", "{978A3963-4B90-4A7F-88E7-BE1089B30C58}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,10 @@ Global
 		{D78EAB2E-5618-4F60-94E6-584E888F272B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D78EAB2E-5618-4F60-94E6-584E888F272B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D78EAB2E-5618-4F60-94E6-584E888F272B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{978A3963-4B90-4A7F-88E7-BE1089B30C58}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{978A3963-4B90-4A7F-88E7-BE1089B30C58}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{978A3963-4B90-4A7F-88E7-BE1089B30C58}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{978A3963-4B90-4A7F-88E7-BE1089B30C58}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
